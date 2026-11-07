@@ -1,0 +1,17 @@
+PREPPER LIBRARY - SPARE COPY (USB drive, ext4, label prepper-usb)
+
+backup/   nightly mirror of the prepper box (last-run.log says when)
+  srv-prepper/   all content: zim/ maps/ kolibri/ ollama/ photon/ routing/ ...
+  opt-prepper/   the docker stack (docker-compose.yml, nginx.conf, landing page ...)
+extra/    extra content served straight off this drive (extra/zim = more Kiwix books)
+
+Run it on any Linux PC with Docker (needs ~8 GB RAM):
+  1. Plug in this drive. It mounts somewhere, e.g. /media/you/prepper-usb
+  2. cd /media/you/prepper-usb/backup/opt-prepper
+  3. echo DATA=/media/you/prepper-usb/backup/srv-prepper > .env
+  4. sudo docker compose up -d
+  5. Open http://localhost  (library :8080, chat :3000, courses :8070)
+
+Just the books, no Docker: install Kiwix (kiwix.org) and open any file in
+backup/srv-prepper/zim/ - each .zim is a whole offline website.
+Windows can't read ext4 without help; use a Linux PC or boot a Linux USB stick.

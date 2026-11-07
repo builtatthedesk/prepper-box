@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline Map</title>
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<script src="lib/maplibre-gl.js"></script>
+<script src="lib/pmtiles.js"></script>
+<script src="lib/basemaps.js"></script>
+<style>
+  html, body, #map { margin:0; height:100%; }
+  #bar { position:absolute; top:10px; left:10px; right:56px; z-index:2; display:flex; gap:8px;
+         align-items:flex-start; flex-wrap:wrap; font:14px system-ui, sans-serif }
+  #back, .ovl, #q { background:#fff; padding:7px 10px; border-radius:6px; border:0; color:#1d1d1b;
+         text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,.3); font:inherit }
+  .ovl { cursor:pointer } .ovl.on { background:#2f6b3a; color:#fff }
+  #search { flex:1; min-width:180px; max-width:360px } #q { width:100% }
+  #results { list-style:none; margin:4px 0 0; padding:0; background:#fff; border-radius:6px;
+             box-shadow:0 1px 4px rgba(0,0,0,.3) } #results:empty { display:none }
+  #results li { padding:7px 10px; cursor:pointer; color:#1d1d1b } #results li:hover { background:#eef3ee }
+  #dir { position:absolute; z-index:3; left:10px; top:56px; width:min(340px, calc(100% - 20px)); max-height:calc(100% - 110px);
+         overflow:auto; background:#fff; color:#1d1d1b; border-radius:8px; box-shadow:0 1px 6px rgba(0,0,0,.35);
+         padding:10px; font:14px system-ui, sans-serif; box-sizing:border-box }
+  #dir .f { position:relative; margin-bottom:6px } #dir input { width:100%; box-sizing:border-box; padding:7px 9px;
+         border:1px solid #ccc; border-radius:6px; font:inherit }
+  #dir ul.sug { list-style:none; margin:2px 0 0; padding:0; border:1px solid #ddd; border-radius:6px } #dir ul.sug:empty { display:none }
+  #dir ul.sug li { padding:6px 9px; cursor:pointer } #dir ul.sug li:hover { background:#eef3ee }
+  #dir .sum { font-weight:600; margin:8px 0 4px } #dir ol { margin:0; padding-left:22px } #dir ol li { margin:5px 0 }
+  #dir ol small, #dir .hint { color:#666 }
+  @media (max-width:700px) { #dir { top:auto; bottom:28px; max-height:42% } }   /* phone: route stays visible above */
+</style>
+</head>
+<body>
+<div id="bar">
+  <a id="back" href="/">&larr; Home</a>
+  <div id="search" hidden><input id="q" placeholder="Search address or place" autocomplete="off"><ul id="results"></ul></div>
+</div>
+<div id="dir" hidden>
+  <div class="f"><input id="from" placeholder="From: address or place" autocomplete="off"><ul class="sug" id="from-s"></ul></div>
+  <div class="f"><input id="to" placeholder="To: address or place" autocomplete="off"><ul class="sug" id="to-s"></ul></div>
+  <div class="hint">Or right-click / long-press the map to set a point. Works inside the area the directions were built for.</div>
+  <div id="dir-out"></div>
+</div>
+<div id="map"></div>
+<script>
+  // Everything is served from this box: tiles (/maps/data/*.pmtiles, HTTP range requests),
+  // fonts and sprites (assets/, from protomaps/basemaps-assets). No internet needed.
+  // Two layer stacks: world.pmtiles (whole planet, zoom 0-7, overzoomed past that) underneath,
+  // usa.pmtiles (full detail) on top from zoom 6 up. Where usa has no tiles, the world shows through.
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile);
+  const base = location.origin + "/maps/";
+  const flavor = basemaps.namedFlavor("light"), attribution = "© OpenStreetMap contributors, Protomaps";
+  const usLayers = basemaps.layers("usa", flavor, { lang: "en" })
+    .filter(l => l.type !== "background").map(l => ({ ...l, id: "us-" + l.id }));
+  const map = new maplibregl.Map({
+    container: "map",
+    center: [-98.5, 39.5], zoom: 4, maxZoom: 18,   // start view: change to your area
+    style: {
+      version: 8,
+      glyphs: base + "assets/fonts/{fontstack}/{range}.pbf",
+      sprite: base + "assets/sprites/v4/light",
+      sources: {
+        world: { type: "vector", url: "pmtiles://" + base + "data/world.pmtiles", attribution },
+        usa: { type: "vector", url: "pmtiles://" + base + "data/usa.pmtiles", minzoom: 6, attribution },
+      },
+      layers: [...basemaps.layers("world", flavor, { lang: "en" }), ...usLayers],
+    },
+  });
+  // Raster overlays (photo/topo imagery for small areas): one toggle button each, shown above
+  // both street-map stacks and under the US labels. At most one on at a time; click again for the
+  // street map. An overlay is skipped if its file isn't there yet. Add more by adding a line.
+  const OVERLAYS = [
+    // Make these with get-satellite.py (see README); a button appears once the file is in $DATA/maps.
+    { id: "sat", file: "local-sat.pmtiles", label: "Satellite", attribution: "Imagery: USGS The National Map" },
+    { id: "topo", file: "local-topo.pmtiles", label: "Topo", attribution: "USGS Topo, The National Map" },
+  ];
+  map.on("load", async () => {
+    const firstLabel = map.getStyle().layers.find(l => l.type === "symbol" && l.id.startsWith("us-"))?.id;
+    for (const o of OVERLAYS) {
+      const url = base + "data/" + o.file;
+      if (!(await fetch(url, { method: "HEAD" }).then(r => r.ok, () => false))) continue;
+      map.addSource(o.id, { type: "raster", url: "pmtiles://" + url, tileSize: 256, attribution: o.attribution });
+      map.addLayer({ id: o.id, type: "raster", source: o.id, layout: { visibility: "none" } }, firstLabel);
+      const b = document.createElement("button");
+      b.className = "ovl"; b.textContent = o.label; $("bar").appendChild(b);
+      b.onclick = () => {
+        const on = map.getLayoutProperty(o.id, "visibility") !== "visible";
+        for (const x of document.querySelectorAll("button.ovl:not(#dirbtn)")) x.classList.remove("on");
+        for (const x of OVERLAYS) if (map.getLayer(x.id)) map.setLayoutProperty(x.id, "visibility", "none");
+        if (on) { map.setLayoutProperty(o.id, "visibility", "visible"); b.classList.add("on"); }
+      };
+    }
+  });
+
+  // Address search: Photon geocoder on this box, proxied by nginx at /geocode/. Hidden if down.
+  const GEO = location.origin + "/geocode/api";
+  fetch(GEO + "?q=main%20street&limit=1").then(r => { if (r.ok) $("search").hidden = false; }, () => {});
+  let timer, marker;
+  $("q").oninput = () => { clearTimeout(timer); timer = setTimeout(lookup, 300); };
+  async function lookup() {
+    const q = $("q").value.trim(); $("results").innerHTML = ""; if (q.length < 3) return;
+    const c = map.getCenter();
+    const r = await fetch(`${GEO}?q=${encodeURIComponent(q)}&limit=6&lat=${c.lat}&lon=${c.lng}`).then(r => r.json());
+    for (const f of r.features) {
+      const p = f.properties, li = document.createElement("li");
+      li.textContent = [p.name || [p.housenumber, p.street].filter(Boolean).join(" "), p.city, p.state].filter(Boolean).join(", ");
+      li.onclick = () => {
+        const [lon, lat] = f.geometry.coordinates;
+        map.flyTo({ center: [lon, lat], zoom: p.housenumber ? 17 : 14 });
+        marker?.remove(); marker = new maplibregl.Marker().setLngLat([lon, lat]).addTo(map);
+        $("results").innerHTML = "";
+      };
+      $("results").appendChild(li);
+    }
+  }
+  function $(id) { return document.getElementById(id); }
+
+  // Driving directions: Valhalla on this box, proxied by nginx at /route/. Button hidden if down.
+  const ROUTE = location.origin + "/route/route";
+  const pts = { from: null, to: null }, pins = {};
+  fetch(ROUTE, { method: "POST" }).then(r => { if (r.status < 500) {
+    const b = document.createElement("button"); b.className = "ovl"; b.id = "dirbtn"; b.textContent = "Directions";
+    b.onclick = () => { $("dir").hidden = !$("dir").hidden; b.classList.toggle("on", !$("dir").hidden); };
+    $("bar").insertBefore(b, $("search"));
+  } }, () => {});
+  function label(p) {
+    return [p.name || [p.housenumber, p.street].filter(Boolean).join(" "), p.city, p.state].filter(Boolean).join(", ");
+  }
+  function setPoint(which, lon, lat, text) {
+    pts[which] = [lon, lat]; $(which).value = text;
+    pins[which]?.remove();
+    pins[which] = new maplibregl.Marker({ color: which === "from" ? "#2f6b3a" : "#b03a2e" }).setLngLat([lon, lat]).addTo(map);
+    route();
+  }
+  function clearPoint(which) { pts[which] = null; pins[which]?.remove(); delete pins[which]; }
+  function clearRoute() { seq++; map.getSource("route")?.setData({ type: "FeatureCollection", features: [] }); }
+  for (const which of ["from", "to"]) {
+    let t;
+    $(which).oninput = () => {
+      if (pts[which]) { clearPoint(which); clearRoute(); $("dir-out").innerHTML = ""; }   // typed text no longer matches the pin
+      clearTimeout(t); t = setTimeout(async () => {
+      const q = $(which).value.trim(), ul = $(which + "-s"); if (q.length < 3) { ul.innerHTML = ""; return; }
+      const c = map.getCenter();
+      const r = await fetch(`${GEO}?q=${encodeURIComponent(q)}&limit=5&lat=${c.lat}&lon=${c.lng}`).then(r => r.json(), () => ({ features: [] }));
+      if ($(which).value.trim() !== q) return;   // a newer query is on its way
+      ul.innerHTML = "";
+      for (const f of r.features) {
+        const li = document.createElement("li"); li.textContent = label(f.properties);
+        li.onclick = () => { ul.innerHTML = ""; setPoint(which, ...f.geometry.coordinates, li.textContent); };
+        ul.appendChild(li);
+      }
+    }, 300); };
+  }
+  let lastPick = 0;
+  function pick(lngLat) {   // first press sets From, second sets To, a third starts over from a new From
+    if ($("dir").hidden || Date.now() - lastPick < 1000) return;   // Android long-press fires both handlers
+    lastPick = Date.now();
+    if (pts.from && pts.to) { clearPoint("to"); clearPoint("from"); $("to").value = ""; clearRoute(); }
+    setPoint(pts.from ? "to" : "from", lngLat.lng, lngLat.lat, `${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}`);
+  }
+  map.on("contextmenu", e => pick(e.lngLat));   // right-click; long-press on Android
+  let press;   // iOS Safari fires no contextmenu on long-press: time it ourselves
+  map.on("touchstart", e => { clearTimeout(press); if (e.points.length === 1) press = setTimeout(() => pick(e.lngLat), 550); });
+  for (const ev of ["touchend", "touchmove", "touchcancel"]) map.on(ev, () => clearTimeout(press));
+  function decode(s) {   // Valhalla polyline, 6 digits of precision -> [[lon, lat], ...]
+    const out = []; let i = 0, lat = 0, lon = 0;
+    while (i < s.length) {
+      for (const k of [0, 1]) {
+        let shift = 0, res = 0, b;
+        do { b = s.charCodeAt(i++) - 63; res |= (b & 31) << shift; shift += 5; } while (b >= 32);
+        const d = res & 1 ? ~(res >> 1) : res >> 1;
+        if (k) lon += d; else lat += d;
+      }
+      out.push([lon / 1e6, lat / 1e6]);
+    }
+    return out;
+  }
+  const fmtMi = m => m < 0.2 ? `${Math.round(m * 5280 / 10) * 10} ft` : `${m.toFixed(1)} mi`;
+  const fmtT = s => { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+  const esc = s => String(s).replace(/[<&]/g, c => c === "<" ? "&lt;" : "&amp;");
+  let seq = 0;
+  async function route() {
+    const out = $("dir-out"), mine = ++seq;   // only the newest request may draw
+    if (!pts.from || !pts.to) { out.innerHTML = ""; clearRoute(); return; }
+    out.innerHTML = "<p class='hint'>Finding a route...</p>";
+    const body = { locations: [pts.from, pts.to].map(([lon, lat]) => ({ lat, lon })),
+                   costing: "auto", directions_options: { units: "miles" } };
+    const r = await fetch(ROUTE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(r => r.json(), () => null);
+    if (mine !== seq) return;
+    const trip = r?.trip;
+    if (!trip) { clearRoute(); out.innerHTML = `<p class='hint'>No route: ${esc((r && (r.error || r.status)) || "routing service not answering")}.</p>`; return; }
+    const coords = trip.legs.flatMap(l => decode(l.shape));
+    const geo = { type: "Feature", geometry: { type: "LineString", coordinates: coords } };
+    if (map.getSource("route")) map.getSource("route").setData(geo);
+    else {
+      map.addSource("route", { type: "geojson", data: geo });
+      map.addLayer({ id: "route", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" },
+                     paint: { "line-color": "#1f5fbf", "line-width": 5, "line-opacity": .85 } });
+    }
+    const bb = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+    const wide = window.innerWidth > 700;
+    map.fitBounds(bb, { padding: { top: 80, bottom: wide ? 40 : window.innerHeight * 0.45 + 30, left: wide ? 370 : 40, right: 40 } });
+    const steps = trip.legs.flatMap(l => l.maneuvers);
+    out.innerHTML = `<div class="sum">${fmtMi(trip.summary.length)} · ${fmtT(trip.summary.time)}</div><ol>` +
+      steps.map(m => `<li>${esc(m.instruction)}` +
+                     (m.length ? ` <small>${fmtMi(m.length)}</small>` : "") + "</li>").join("") + "</ol>";
+  }
+
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }));
+  map.addControl(new maplibregl.GeolocateControl());
+</script>
+</body>
+</html>

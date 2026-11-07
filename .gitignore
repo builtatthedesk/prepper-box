@@ -1,0 +1,6 @@
+secrets/
+*.iso
+serve/
+.claude/
+__pycache__/
+catalog-info.yaml

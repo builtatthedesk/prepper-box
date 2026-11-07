@@ -1,0 +1,9 @@
+# Static address for the hotspot interface (systemd-networkd; the wired port stays on netplan/DHCP)
+[Match]
+Name=__IF__
+
+[Network]
+Address=10.42.0.1/24
+ConfigureWithoutCarrier=yes
+LinkLocalAddressing=no
+IPv6AcceptRA=no

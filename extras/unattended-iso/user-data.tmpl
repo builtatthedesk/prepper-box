@@ -1,0 +1,66 @@
+#cloud-config
+# Ubuntu autoinstall for a prepper box. ⚠️ WIPES the largest internal (non-USB) disk
+# with NO confirmation prompt. Built into prepper-WIPES-DISK.iso by build-iso.sh.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard: {layout: us}
+  timezone: __TZ__
+  identity:
+    hostname: prepper
+    username: __USER__
+    realname: __USER__
+    password: "__PASSWORD_HASH__"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "__SSH_PUBKEY__"
+  storage:
+    layout:
+      name: direct
+      match: {path: __DISK__}
+  packages: [avahi-daemon, curl, lshw, smartmontools, efibootmgr]
+  early-commands:
+    # Pick the install disk: largest non-USB, non-removable disk >= 30 GB. The USB data
+    # drive and a KVM virtual CD are excluded. No candidate -> fail the install.
+    - |
+      python3 - <<'EOF'
+      import json, subprocess, sys
+      out = subprocess.check_output(['lsblk', '-J', '-b', '-d', '-o', 'NAME,TRAN,RM,TYPE,SIZE'])
+      def falsy(v): return v in (False, 0, '0', None)
+      c = [d for d in json.loads(out)['blockdevices']
+           if d['type'] == 'disk' and d.get('tran') != 'usb' and falsy(d.get('rm'))
+           and not d['name'].startswith(('loop', 'sr', 'zram', 'ram'))
+           and int(d['size']) >= 30 * 10**9]
+      print('candidate disks:', c, file=sys.stderr)
+      if not c:
+          sys.exit('prepper: no internal disk >= 30 GB found, refusing to install')
+      disk = '/dev/' + max(c, key=lambda d: int(d['size']))['name']
+      # Loop guard: install reboots (not powers off), so if the firmware boots this ISO
+      # again, refuse when the chosen disk already holds a finished prepper install.
+      import glob, os
+      os.makedirs('/tmp/pg', exist_ok=True)
+      for part in sorted(glob.glob(disk + '*')):
+          if part == disk: continue
+          if subprocess.call(['mount', '-o', 'ro', part, '/tmp/pg'], stderr=subprocess.DEVNULL) == 0:
+              done = os.path.exists('/tmp/pg/etc/prepper-installed')
+              subprocess.call(['umount', '/tmp/pg'])
+              if done:
+                  sys.exit('prepper: ' + part + ' already has a prepper install, refusing to wipe it again')
+      p = '/autoinstall.yaml'
+      s = open(p).read()
+      assert '__DISK__' in s
+      open(p, 'w').write(s.replace('__DISK__', disk))
+      EOF
+  late-commands:
+    - curtin in-target -- systemctl enable avahi-daemon
+    - date -Is > /target/etc/prepper-installed
+    # Console autologin on tty1 so the box can be inspected through a KVM without
+    # typing a password (sudo still asks for one). Remove: rm the override + daemon-reload.
+    - mkdir -p /target/etc/systemd/system/getty@tty1.service.d
+    - printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin __USER__ --noclear %%I $TERM\n' > /target/etc/systemd/system/getty@tty1.service.d/autologin.conf
+    # Short visible GRUB menu, plain text console
+    - sed -i 's/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/; s/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' /target/etc/default/grub
+    - curtin in-target -- update-grub
+  shutdown: reboot

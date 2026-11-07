@@ -1,0 +1,94 @@
+# Offline library stack. Lives at /opt/prepper; content in $DATA (default /srv/prepper).
+#   docker compose up -d
+# Ports: 80 landing page (+ /maps/, /board/, /geocode/), 8080 Kiwix library, 8090 Ask the Library,
+# 3000 chat (Open WebUI -> Ollama), 8070 Kolibri courses.
+name: prepper   # container names (prepper-kiwix-1) are used by kiwix-refresh.sh
+services:
+  landing:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports: ["80:80"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./landing:/usr/share/nginx/html:ro
+      - ${DATA}/maps:/usr/share/nginx/html/maps/data:ro   # usa.pmtiles (nginx does range requests)
+      - ${DATA}/shelf/pdf:/usr/share/nginx/html/shelf:ro   # manuals shelf PDFs (shelf/build.py)
+
+  kiwix:
+    image: ghcr.io/kiwix/kiwix-serve:latest
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes:
+      - ${DATA}/zim:/data:ro
+      - ${USB:-/srv/usb}/extra/zim:/extra:ro   # optional: more ZIMs on a USB drive; empty if none
+    # Serve every ZIM in both folders (glob needs a shell); kiwix-refresh restarts the container
+    # on new downloads or when the drive comes/goes. Exits and retries until the first ZIM lands.
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["exec kiwix-serve --port=8080 /data/*.zim $(ls /extra/*.zim 2>/dev/null)"]
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ${DATA}/ollama:/root/.ollama
+
+  ask:   # "Ask the Library": Kiwix search -> best passages -> Ollama, with source links
+    image: python:3.13-alpine
+    restart: unless-stopped
+    ports: ["8090:8000"]
+    depends_on: [kiwix, ollama]
+    working_dir: /app
+    volumes: ["./ask:/app:ro"]
+    environment:
+      MODEL: ${MODEL:-llama3.2:3b}
+    command: ["python", "-u", "app.py"]
+
+  board:   # notice board + file drop, proxied by nginx at /board/ (works on hotspot, LAN and tailnet)
+    image: python:3.13-alpine
+    restart: unless-stopped
+    user: "1000:1000"   # the first user on the box, so files can be tidied up without sudo
+    working_dir: /app
+    volumes: ["./board:/app:ro", "${DATA}/board:/data"]
+    command: ["python", "-u", "app.py"]
+
+  geocoder:   # offline address search for the map (Photon + US dump from get-geocoder.sh)
+    image: eclipse-temurin:21-jre
+    restart: unless-stopped
+    ports: ["2322:2322"]
+    volumes: ["${DATA}/photon:/photon"]
+    command: ["java", "-Xmx1500m", "-jar", "/photon/photon-1.3.0.jar", "serve",
+              "-data-dir", "/photon", "-listen-ip", "0.0.0.0", "-cors-any"]
+
+  routing:   # offline driving directions (Valhalla, tiles from get-routing.sh), nginx /route/
+    # Pinned: tiles must be served by the same Valhalla version that built them.
+    image: ghcr.io/valhalla/valhalla-scripted@sha256:e2078b638205fba6ef246d8ae731d7f197b346a0ebc74fb5f41b01db50504c90
+    restart: unless-stopped
+    volumes: ["${DATA}/routing:/custom_files"]
+    mem_limit: 1g   # 2 workers x 250 MB tile cache (valhalla.json) + overhead
+    environment:
+      use_tiles_ignore_pbf: "True"   # never rebuild here: serve the prebuilt tar only
+      force_rebuild: "False"
+      build_elevation: "False"
+      server_threads: "2"
+      update_existing_config: "False"
+
+  kolibri:   # Learning Equality's offline course platform (Khan math, CK-12, PhET ...). Port 8070.
+    build: ./kolibri
+    image: prepper-kolibri:0.19.5
+    restart: unless-stopped
+    ports: ["8070:8080"]
+    volumes: ["${DATA}/kolibri:/data"]   # owned by uid 1000
+
+  chat:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    ports: ["3000:8080"]
+    depends_on: [ollama]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_AUTH: "False"            # single-user box on the home LAN
+      ENABLE_OPENAI_API: "False"
+      OFFLINE_MODE: "True"
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - ${DATA}/open-webui:/app/backend/data

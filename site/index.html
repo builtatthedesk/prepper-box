@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prepper Box</title>
+<meta name="description" content="Build an offline library on a small PC: Wikipedia, repair and first-aid books, street maps with driving directions, courses, a ham radio pack and a small AI. Works with no internet.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+<style>
+  :root { --bg:#f6f5f1; --card:#fff; --ink:#1d1d1b; --muted:#5f625c; --line:#e3e1da; --accent:#2f6b3a; --soft:#e8f0e6; --warn:#fff4e0; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111410; --card:#1a1e19; --ink:#e7e9e4; --muted:#9ea69b; --line:#2b3229; --accent:#7cc48a; --soft:#1d2a1f; --warn:#2e2614; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:780px; margin:0 auto; padding:24px 16px 64px; }
+  a { color:var(--accent); }
+  .kicker { font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0; }
+  h1 { font-size:clamp(30px, 7vw, 44px); line-height:1.1; margin:6px 0 10px; }
+  .lede { font-size:19px; color:var(--muted); margin:0 0 20px; }
+  h2 { font-size:24px; margin:40px 0 10px; }
+  h3 { font-size:19px; margin:22px 0 6px; }
+  .btns { display:flex; gap:10px; flex-wrap:wrap; margin:18px 0 6px; }
+  .btn { display:inline-block; text-decoration:none; font-weight:600; padding:12px 18px; border-radius:10px; border:1px solid var(--accent); min-height:46px; }
+  .btn.main { background:var(--accent); color:#fff; }
+  @media (prefers-color-scheme: dark) { .btn.main, button.copy { color:#0f1a10; } }
+  .story { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); margin:18px 0; }
+  .step { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
+  .step b { display:block; font-size:18px; margin-bottom:4px; }
+  figure { margin:0 0 16px; }
+  figure img { width:100%; height:auto; border:1px solid var(--line); border-radius:12px; background:#fff; display:block; }
+  figcaption { font-size:14px; color:var(--muted); margin-top:6px; }
+  .shots { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); align-items:start; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:16px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:14px; color:var(--muted); font-weight:600; }
+  tr:last-child td { border-bottom:0; }
+  .tw { overflow-x:auto; }
+  ol.setup > li { margin:0 0 14px; }
+  .note { background:var(--soft); border-radius:12px; padding:12px 14px; font-size:15px; margin:12px 0; }
+  .warn { background:var(--warn); border-radius:12px; padding:12px 14px; font-size:15px; margin:12px 0; }
+  code { font-size:.88em; background:var(--soft); padding:1px 5px; border-radius:5px; overflow-wrap:anywhere; }
+  pre.cmd { background:#1d1f1c; color:#e9eee6; border-radius:10px; padding:12px 14px; overflow-x:auto; font-size:14px; line-height:1.5; margin:8px 0; }
+  pre.cmd code { background:none; padding:0; color:inherit; }
+  details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin:8px 0; }
+  summary { cursor:pointer; font-weight:600; }
+  pre.prompt { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; font-size:13px; line-height:1.45; max-height:420px; overflow:auto; margin:10px 0 0; }
+  button.copy { font:inherit; font-weight:600; padding:10px 16px; border-radius:10px; border:1px solid var(--accent); background:var(--accent); color:#fff; min-height:44px; cursor:pointer; }
+  footer { margin-top:48px; color:var(--muted); font-size:14px; border-top:1px solid var(--line); padding-top:16px; }
+/* Netlify's free plan pins a "Powered by Netlify" badge to the bottom corner: room so it covers nothing. */
+@media screen { body::after { content:""; display:block; height:72px; } }
+@media print { #nl-badge-frame, [id^="nl-badge"] { display:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Built at the Desk</p>
+  <h1>📚 A library that works with no internet</h1>
+  <p class="lede">Turn a small old PC into a box that holds Wikipedia, first-aid and repair books, street maps with driving directions, school courses and a small AI. Everyone in the house reaches it from a phone or laptop. When the internet is down, it isn't.</p>
+  <div class="btns">
+    <a class="btn main" href="#build">Build one</a>
+    <a class="btn" href="https://github.com/builtatthedesk/prepper-box">The code on GitHub</a>
+    <a class="btn" href="#claude">Have Claude build it</a>
+  </div>
+
+  <h2>What's on it</h2>
+  <div class="story">
+    <div class="step"><b>📖 Library</b>All of English Wikipedia with pictures, a medical encyclopedia, iFixit repair guides, Wikivoyage, water, food and post-disaster manuals, Project Gutenberg, Crash Course and TED-Ed videos, and years of Q&amp;A on DIY, cooking, gardening, car repair and the outdoors.</div>
+    <div class="step"><b>🗺️ Map</b>The whole world at city level and every US street, with address search and turn-by-turn driving directions, all served from the box.</div>
+    <div class="step"><b>🎓 Courses</b>Khan Academy math and science with practice exercises, CK-12, OpenStax textbooks, PhET science simulations and Osmosis medical lessons, with progress tracking.</div>
+    <div class="step"><b>💬 Ask</b>Type a question in plain English. It searches the library and a small AI answers from what it found, with links to check.</div>
+    <div class="step"><b>📻 Ham radio pack</b>Band privileges, calling frequencies, FRS/GMRS/CB and marine channels, NOAA weather stations near you, net procedure and FCC Part 97.</div>
+    <div class="step"><b>📶 Its own Wi-Fi</b>Optional: the box puts up a Wi-Fi network, so phones can use it with no router at all. Plus a notice board for leaving messages and sharing files.</div>
+  </div>
+
+  <figure><img src="img/start.jpg" width="1100" height="760" alt="The start page: a card each for the Library, Map, Ask the Library, Ham Radio Pack, Courses and Notice Board" loading="lazy"><figcaption>The start page. Open <code>http://prepper.local</code> on any phone or computer in the house.</figcaption></figure>
+  <div class="shots">
+    <figure><img src="img/directions.jpg" width="1100" height="760" alt="The offline map showing a 40-mile driving route across Pennsylvania and New Jersey with turn-by-turn steps" loading="lazy"><figcaption>Driving directions, worked out on the box itself.</figcaption></figure>
+    <figure><img src="img/library.jpg" width="1100" height="760" alt="The Wikipedia article on water purification, read offline in Kiwix" loading="lazy"><figcaption>Wikipedia, read from the box with Kiwix. (Article: Wikipedia, CC BY-SA 4.0.)</figcaption></figure>
+  </div>
+
+  <h2>What you need</h2>
+  <div class="tw"><table>
+    <tr><th></th><th>Enough</th><th>What we use</th></tr>
+    <tr><td>Computer</td><td>Any 64-bit PC with 8 GB of memory. An old office mini-PC or laptop is plenty. No graphics card.</td><td>Intel NUC from 2013 (Core i5, 8 GB)</td></tr>
+    <tr><td>Storage</td><td>250 GB holds the essentials, a smaller Wikipedia and a regional map</td><td>1 TB SSD inside, plus a 5 TB USB drive for a nightly backup and extra books</td></tr>
+    <tr><td>To install</td><td colspan="2">A USB stick (4 GB or more), a keyboard and screen for the first half hour, and a wired internet connection while it downloads</td></tr>
+    <tr><td>Wi-Fi of its own</td><td colspan="2">Optional: a USB Wi-Fi adapter that can be an access point (ours is a TP-Link Archer with a Realtek RTL8822BU chip, which Ubuntu supports out of the box)</td></tr>
+    <tr><td>Power</td><td colspan="2">A mini-PC like ours draws roughly 10 to 25 watts, so a small battery power station runs it for hours.</td></tr>
+  </table></div>
+
+  <h2 id="build">Set it up</h2>
+  <p>Plan an evening for the setup, then let it download for a day or two. You'll type a few commands; each one is below, ready to copy.</p>
+  <ol class="setup">
+    <li><b>Make an install stick.</b> Download <a href="https://ubuntu.com/download/server">Ubuntu Server</a> (24.04 LTS or newer) and write it to the USB stick with <a href="https://etcher.balena.io">balenaEtcher</a> or <a href="https://rufus.ie">Rufus</a>.</li>
+    <li><b>Install Ubuntu.</b> Plug a keyboard, screen and network cable into the PC. Start it and press the boot-menu key (usually F10, F12 or Esc) to boot from the stick. Take the defaults, except: name the server <code>prepper</code>, and tick <b>Install OpenSSH server</b>. When it finishes, remove the stick and reboot.
+      <div class="warn">⚠️ Installing erases everything on the PC's disk.</div></li>
+    <li><b>Run the setup.</b> From now on you can unplug the keyboard and screen and work from your own computer. Open a terminal (on Windows, PowerShell) and log in with the username you picked:
+      <pre class="cmd"><code>ssh yourname@prepper.local</code></pre>
+      Then:
+      <pre class="cmd"><code>git clone https://github.com/builtatthedesk/prepper-box.git
+cd prepper-box
+sudo ./setup.sh</code></pre>
+      About 15 minutes. At the end it prints the address of the start page. Open it: everything is there, just empty.</li>
+    <li><b>Fill it.</b> Start the library download. It fetches the essentials first, then the biggest Wikipedia that fits your disk, then extras if there's room, checking every file:
+      <pre class="cmd"><code>tmux new -s fill
+DATA=/srv/prepper /opt/prepper/get-content.sh</code></pre>
+      Close the window whenever you like; it keeps going. Books appear in the library as they finish. Then the map (19 GB for the US):
+      <pre class="cmd"><code>DATA=/srv/prepper /opt/prepper/get-maps.sh</code></pre>
+      Address search, courses, the manuals shelf, the ham pack and driving directions each have one more command; they're listed in the <a href="https://github.com/builtatthedesk/prepper-box#3-fill-it">README</a>.</li>
+    <li><b>Optional extras.</b> Plug in a USB Wi-Fi adapter and run <code>sudo /opt/prepper/hotspot/install.sh</code> for the box's own Wi-Fi network. Add a USB hard drive for a nightly backup (README, "Optional").</li>
+  </ol>
+
+  <h3>No keyboard or screen?</h3>
+  <p>Use a KVM-over-IP gadget (PiKVM, TinyPilot, JetKVM and similar). It plugs into the PC's HDMI and USB and shows the screen in your web browser. It can also pretend to be a USB stick: load the Ubuntu ISO into it as "virtual media", boot from it, and follow step 2 in the browser instead of at a desk. That's how ours was built.</p>
+  <p>The repo also has a hands-off installer (<code>extras/unattended-iso</code>) that installs Ubuntu with no questions at all. It erases the biggest disk in whatever boots it without asking, so use it only on a box you mean to wipe. Some KVMs only pass through the first 2.2 GB of an ISO, which breaks it; if the screen stops at <code>grub&gt;</code>, go back to the normal install.</p>
+
+  <h2 id="claude">Or have Claude build it</h2>
+  <p>Rather have your own version built from nothing, your way? <a href="https://claude.com/claude-code">Claude Code</a> is an AI helper that writes and runs code for you. Install Ubuntu (steps 1 and 2 above), then run Claude Code on your own computer, paste this prompt, and change anything you like: your area for the map, your languages, what goes in the library. It explains each step as it goes and asks before changing the box.</p>
+  <p><button class="copy" id="copy-prompt" type="button">Copy the prompt</button> <span id="copy-ok" style="color:var(--muted);font-size:15px" aria-live="polite"></span></p>
+  <details><summary>Show the prompt</summary><pre class="prompt" id="prompt">Build me an offline knowledge server ("prepper box") on a small PC that is already running a fresh Ubuntu Server install. I can reach it with: ssh &lt;me&gt;@prepper.local (it has internet during setup). Explain each step in plain English, keep everything simple, and ask me before you install anything on the box.
+
+What it is: a start page plus a few services, all in Docker Compose, that keep working with no internet once the content is downloaded. People use it from phones and laptops on the home network.
+
+The box: 64-bit Intel, 8 GB RAM, no GPU, one disk. Put the stack in /opt/prepper and all downloaded content in /srv/prepper (one DATA= setting so it can move to another disk). Check the free space before every big download and size things to fit.
+
+Services (one docker-compose.yml, restart unless-stopped):
+1. Start page on port 80 (nginx): one card per service, with plain-English descriptions. Links must use the hostname the page was opened with, so they work from any address.
+2. Library: kiwix-serve on :8080 serving every .zim file in /srv/prepper/zim. A cron job restarts it when a new ZIM finishes downloading.
+3. Library download script: from download.kiwix.org, newest version of each book, resumable, with aria2c (the mirrors are slow single-stream) into a hidden folder, then check the published sha256 before moving the file into the library. Order: essentials first (WikiMed medical encyclopedia, iFixit, Wikivoyage, the zimgit water/food/medicine/post-disaster/knots books, Stack Exchange DIY/cooking/gardening/outdoors/mechanics), then the biggest English Wikipedia that fits (maxi, else nopic, else mini) leaving 20 GB free, then extras if there's room (Wiktionary, Gutenberg, Khan Academy, Crash Course, TED-Ed).
+4. Map at /maps/: MapLibre GL with Protomaps vector tiles in .pmtiles files served by nginx (range requests). world.pmtiles = the whole planet to zoom 7 (pmtiles extract of the latest daily build); a second file with full detail for my area on top. Bundle the map JavaScript, fonts and icons on the box (no CDN at run time).
+5. Address search on the map: Photon geocoder with the prebuilt GraphHopper database for my country, proxied by nginx at /geocode/. Hide the search box if it's down.
+6. Driving directions: Valhalla, tiles built on a bigger computer (merge the Geofabrik extracts with osmium first, or border roads get duplicated) and only served on the box, proxied at /route/route. Pin the image by digest so the tiles and the server version match. A Directions button on the map: from/to by search or long-press, route line and turn list in miles.
+7. Small AI: Ollama with a 3B model (llama3.2:3b) and Open WebUI on :3000, offline mode, no login.
+8. "Ask the Library" on :8090: a tiny Python (standard library only) app that searches Kiwix for the question, reads the top articles, gives the best passages to the model, and streams an answer that cites [1], [2] with links back to the articles. Flag answers that cite sources it wasn't given.
+9. Courses: Kolibri on :8070 (pip install baked into the image so it starts with no internet) plus a script to import a list of channels (Khan Academy, CK-12, OpenStax, PhET ...).
+10. Notice board at /board/: notes and a file drop for everyone on the network, size limits, files always download (never open in the browser).
+
+Also:
+- A setup.sh I can run again safely, that installs Docker and the tools, copies the stack, starts it, pulls the model and adds the cron job.
+- Optional hotspot script: a USB Wi-Fi adapter in AP mode (hostapd + dnsmasq on that interface only), WPA2 password I choose, every DNS name answers with the box so phones pop up the start page. No internet routed.
+- Optional nightly backup to a USB drive (rsync mirror, skip if the drive isn't plugged in, refuse if the source looks empty) with a RESTORE.txt on the drive.
+- Every change gets a one-line undo in the README.
+
+Before you change anything on the box, show me the plan and wait for my OK. After each part, prove it works (open the page, run a search, get a route) before moving on.</pre></details>
+
+  <h2>Questions</h2>
+  <details><summary>What does it cost?</summary><p>Whatever the PC costs. Everything on it is free and open source, and the books, maps and courses are free to download. Ours: a used 2013 mini-PC and a 1 TB SSD.</p></details>
+  <details><summary>How long does the download take?</summary><p>The essentials (15 GB) take under an hour on a good connection. All of it (about 700 GB with Wikipedia, Gutenberg, Khan Academy, the US map and courses) took us a few days. It picks up where it left off if it stops.</p></details>
+  <details><summary>How do I use it with no internet?</summary><p>Leave it plugged into your router: phones on your Wi-Fi open <code>http://prepper.local</code> whether the internet is up or not. If the router's down too, the optional hotspot gives the box its own Wi-Fi network.</p></details>
+  <details><summary>Is the AI any good?</summary><p>It's small enough to run on an old PC, so it's slow (about a minute an answer) and sometimes plainly wrong. Treat it as a way to find the right article, and read the article. Never rely on it for medical decisions.</p></details>
+  <details><summary>Can I add my own books?</summary><p>Yes. Any <code>.zim</code> file in <code>/srv/prepper/zim</code> shows up within ten minutes. The repo has a script that turns a folder of PDFs into one searchable book. Only add things you have the right to copy.</p></details>
+  <details><summary>How do I keep it up to date?</summary><p>Run the library download again now and then: it adds new books and skips what's there. To refresh a book, delete it and re-run. For the code, <code>git pull</code> in the repo folder and run <code>sudo ./setup.sh</code> again.</p></details>
+  <details><summary>Can I get the files back off it on Windows?</summary><p>The books are ordinary <code>.zim</code> files: copy them off and open them in the free <a href="https://kiwix.org">Kiwix</a> app on Windows, Mac, Android or iPhone. The backup drive is formatted for Linux, which Windows can't read without extra software.</p></details>
+  <details><summary>Can I see the code?</summary><p>Yes: <a href="https://github.com/builtatthedesk/prepper-box">github.com/builtatthedesk/prepper-box</a> (MIT licence). The books, maps and courses it downloads belong to their makers, each under its own licence; the README lists them.</p></details>
+
+  <footer>Made by <a href="https://github.com/builtatthedesk">Built at the Desk</a>. Not medical, legal or radio advice.</footer>
+</div>
+<script>
+document.getElementById("copy-prompt").addEventListener("click", async () => {
+  const pre = document.getElementById("prompt"), ok = document.getElementById("copy-ok");
+  ok.textContent = "";
+  try { await navigator.clipboard.writeText(pre.textContent); ok.textContent = "Copied."; }
+  catch { pre.parentElement.open = true; const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); ok.textContent = "Press Ctrl+C (or ⌘C) to copy."; }
+});
+</script>
+</body>
+</html>
