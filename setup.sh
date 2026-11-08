@@ -9,6 +9,7 @@
 # Options (environment): DATA=/srv/prepper (where content goes; pick the big disk)
 #                        MODEL=llama3.2:3b (any Ollama model; 3B-4B suits 8 GB RAM, no GPU)
 # Rollback: cd /opt/prepper && docker compose down; rm -rf /opt/prepper /etc/cron.d/prepper
+#           /etc/systemd/network/10-netplan-*.network.d/fallback-ip.conf; networkctl reload
 #           (content in $DATA is left alone; delete it by hand if you want the space back)
 set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "run with sudo: sudo ./setup.sh"; exit 1; }
@@ -58,6 +59,20 @@ fi
 # Content folders. The board and Kolibri containers run as uid 1000, so they own theirs.
 mkdir -p "$DATA"/{zim,maps,board,kolibri,ollama,open-webui,photon,routing,shelf/pdf,ham}
 chown 1000:1000 "$DATA" "$DATA"/{zim,maps,board,kolibri,photon,routing,shelf,shelf/pdf,ham}
+
+# Wired fallback address: with no router (cable straight to a laptop, or a plain switch) the box
+# gives itself 169.254.10.10 after about a minute. With a router, DHCP wins and nothing changes.
+# Needs netplan's systemd-networkd renderer (Ubuntu Server's default); picks the first wired port.
+NETF=$(grep -l -E '^Name=(en|eth)' /run/systemd/network/10-netplan-*.network 2>/dev/null | head -1 || true)
+if [ -n "$NETF" ]; then
+  mkdir -p "/etc/systemd/network/$(basename "$NETF").d"
+  printf '[Network]\nLinkLocalAddressing=yes\nIPv4LLStartAddress=169.254.10.10\n' \
+    > "/etc/systemd/network/$(basename "$NETF").d/fallback-ip.conf"
+  networkctl reload
+  echo "wired fallback address 169.254.10.10 on $(sed -n 's/^Name=//p' "$NETF" | head -1)"
+else
+  echo "note: wired fallback address not set up (no systemd-networkd wired config found)"
+fi
 
 echo "== starting services (first run downloads ~5 GB of container images)"
 cd "$APP"
