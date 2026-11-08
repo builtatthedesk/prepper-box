@@ -81,6 +81,18 @@ Your own books: any `.zim` file dropped in `/srv/prepper/zim` shows up in the li
 minutes. To turn your own PDFs or web pages into one, see `zimwriterfs` (installed by setup) and
 `stack/shelf/build.py` as an example. Only add things you have the right to copy.
 
+## Reaching it with no internet
+
+The box never needs the internet once it's filled. Phones and laptops just need a network path to it:
+
+- **Your router** (internet down, power on): nothing changes, open `http://prepper.local`.
+- **No router, by cable:** plug a laptop straight into the box, or both into a plain switch. After
+  about a minute both pick fallback addresses; open `http://169.254.10.10`. setup.sh configures the
+  box's side (it says so at the end); Windows and Mac laptops do theirs automatically, on Linux set
+  the wired connection to "Link-Local Only".
+- **No router, by Wi-Fi:** the hotspot below. Run it from a power bank and it's portable; anyone
+  within Wi-Fi range uses it from their phone.
+
 ## Optional
 
 - **Its own Wi-Fi.** With a USB Wi-Fi adapter plugged in: `sudo /opt/prepper/hotspot/install.sh`.
@@ -108,7 +120,8 @@ minutes. To turn your own PDFs or web pages into one, see `zimwriterfs` (install
 This repo (scripts, pages, configs) is MIT. It downloads content made by others, each under its own
 licence: Kiwix ZIMs (mostly CC BY-SA, from the Wikimedia and Stack Exchange communities and others),
 OpenStreetMap data (ODbL) via Protomaps, Photon/GraphHopper geocoding data, Kolibri channels (each
-channel lists its licence), and US-government public-domain documents. Map fonts and icons come
+channel lists its licence), US-government public-domain documents, and Hesperian Health Guides
+books (free to copy for non-commercial use, with credit to Hesperian). Map fonts and icons come
 from protomaps/basemaps-assets (OFL). AI models come from Ollama's library under their makers'
 licences. The ham pack quotes the eCFR (public domain) and summarises ARRL and ITU material with
 citations; check rules against the current FCC text before relying on them.
